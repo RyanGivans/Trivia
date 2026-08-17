@@ -35,3 +35,5 @@ Publishing source: **main** branch, **/(root)**.
 Project site URL: `https://ryangivans.github.io/Trivia/`
 
 The capital **T** in `/Trivia/` matches the repository name.
+
+Deployment refresh triggered after GitHub reported Actions and Pages operational on August 17, 2026.
