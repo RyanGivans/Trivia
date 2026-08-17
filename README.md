@@ -7,7 +7,7 @@ Projector-first HTML trivia show with 100 food & beverage questions for the Fire
 - `operator.html` — separate compact control window for the person running trivia
 - `questions.js` — all 100 questions and answers
 - `app.js` — timer, randomization, saved session, keyboard controls, ticket counter, and remote sync
-- `fire-and-ice-logo.png` — add the official Fire & Ice logo using this exact filename
+- `fire-and-ice-logo.png` — official Fire & Ice logo used by the presentation
 
 ## Rally controls
 - **Space / Enter** — reveal or hide answer
@@ -26,8 +26,12 @@ Progress, ticket count, question order, and randomized answer positions are save
 ## Operator remote
 Open `operator.html` in a second window on the same computer/browser. Keep it on the laptop display while `index.html` is on the projector. The two windows synchronize automatically.
 
-## Add the official logo
-Upload the Fire & Ice logo to the repository root as `fire-and-ice-logo.png`. Until then, the presentation uses a text fallback.
+## Fire & Ice logo
+The official Fire & Ice logo is already included in the repository as `fire-and-ice-logo.png`.
 
-## Publish with GitHub Pages
-Open **Settings → Pages**. Under **Build and deployment**, choose **Deploy from a branch**, then select **main** and **/(root)** and save.
+## GitHub Pages
+Publishing source: **main** branch, **/(root)**.
+
+Project site URL: `https://ryangivans.github.io/Trivia/`
+
+The capital **T** in `/Trivia/` matches the repository name.
