@@ -1,44 +1,100 @@
 (() => {
   'use strict';
-  const QUESTIONS = window.TRIVIA_QUESTIONS || [];
-  const KEY = 'fireIceTriviaStateV1';
+  const QUESTIONS = Array.isArray(window.TRIVIA_QUESTIONS) ? window.TRIVIA_QUESTIONS : [];
+  const KEY = 'fireIceTriviaStateV2';
+  const OLD_KEY = 'fireIceTriviaStateV1';
   const CHANNEL = 'fireIceTrivia';
   const bc = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
   const $ = (id) => document.getElementById(id);
   const els = {app:$('app'),landing:$('landing'),questionWrap:$('questionWrap'),category:$('category'),difficulty:$('difficulty'),timer:$('timer'),qnum:$('qnum'),questionText:$('questionText'),choices:$('choices'),answerPanel:$('answerPanel'),answerTitle:$('answerTitle'),answerFact:$('answerFact'),progressFill:$('progressFill'),progressCopy:$('progressCopy'),remainingCount:$('remainingCount'),ticketTop:$('ticketTop'),ticketCount:$('ticketCount'),dock:$('dock'),revealBtn:$('revealBtn'),timerBtn:$('timerBtn'),timerLength:$('timerLength'),toast:$('toast'),pickerDialog:$('pickerDialog'),pickerGrid:$('pickerGrid'),pickerSummary:$('pickerSummary')};
   let timerInterval = null, timerRunning = false, toastTimeout = null;
-  const freshState = () => ({started:false,order:QUESTIONS.map((_,i)=>i),currentPos:0,used:[],revealed:false,ticketCount:0,timerLength:20,timerRemaining:20,clean:false,choiceMaps:{},history:[]});
+
+  const questionsReady = () => QUESTIONS.length === 100 && QUESTIONS.every((q,i) => q && q.id === i + 1 && Array.isArray(q.choices) && q.choices.length === 4 && Number.isInteger(q.answer));
+  const freshState = () => ({started:false,order:QUESTIONS.map((_,i)=>i),currentPos:0,used:[],revealed:false,ticketCount:0,timerLength:20,timerRemaining:20,clean:false,choiceMaps:{}});
+
+  try { localStorage.removeItem(OLD_KEY); } catch {}
   let state = loadState();
-  function loadState(){try{const p=JSON.parse(localStorage.getItem(KEY));if(!p||!Array.isArray(p.order)||p.order.length!==QUESTIONS.length)return freshState();return {...freshState(),...p};}catch{return freshState();}}
-  function saveState(broadcast=true){localStorage.setItem(KEY,JSON.stringify(state));if(broadcast&&bc)bc.postMessage({type:'state',state});}
+
+  function loadState(){
+    try{
+      const p=JSON.parse(localStorage.getItem(KEY));
+      if(!p || !Array.isArray(p.order) || p.order.length!==QUESTIONS.length || !p.order.every(i=>Number.isInteger(i)&&i>=0&&i<QUESTIONS.length)) return freshState();
+      return {...freshState(),...p};
+    }catch{return freshState();}
+  }
+  function saveState(broadcast=true){try{localStorage.setItem(KEY,JSON.stringify(state));}catch{}if(broadcast&&bc)bc.postMessage({type:'state',state});}
   function shuffle(arr){const out=[...arr];for(let i=out.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[out[i],out[j]]=[out[j],out[i]];}return out;}
-  function getCurrentIndex(){return state.order[state.currentPos]??0;} function getCurrent(){return QUESTIONS[getCurrentIndex()]||QUESTIONS[0];}
-  function ensureChoiceMap(q){if(!state.choiceMaps[q.id])state.choiceMaps[q.id]=shuffle([0,1,2,3]);return state.choiceMaps[q.id];}
-  function displayedAnswerIndex(q){return ensureChoiceMap(q).indexOf(q.answer);} function markUsed(index){if(!state.used.includes(index))state.used.push(index);}
+  function getCurrentIndex(){return state.order[state.currentPos]??0;}
+  function getCurrent(){return QUESTIONS[getCurrentIndex()]||null;}
+  function ensureChoiceMap(q){if(!q)return [0,1,2,3];if(!state.choiceMaps[q.id])state.choiceMaps[q.id]=shuffle([0,1,2,3]);return state.choiceMaps[q.id];}
+  function displayedAnswerIndex(q){return ensureChoiceMap(q).indexOf(q.answer);}
+  function markUsed(index){if(Number.isInteger(index)&&index>=0&&index<QUESTIONS.length&&!state.used.includes(index))state.used.push(index);}
+
+  function showQuestionLoadError(){
+    state.started=false;
+    if(els.landing) els.landing.style.display='grid';
+    if(els.questionWrap) els.questionWrap.style.display='none';
+    const hero=els.landing?.querySelector('.hero');
+    if(hero){
+      hero.innerHTML=`<img class="hero-logo" src="fire-and-ice-logo.png" alt="Fire & Ice"><div class="eyebrow">Associate Rally • Trivia</div><h1><span class="hot">Trivia is loading…</span></h1><p>The presentation loaded before the 100-question library finished publishing. Refresh this page in a moment.</p><div class="hero-actions"><button class="btn primary" onclick="location.reload()">Refresh Trivia</button></div><p class="muted" style="font-size:13px;margin-top:18px;margin-bottom:0">Question library detected: ${QUESTIONS.length} / 100</p>`;
+    }
+    if(els.dock) els.dock.classList.add('hide');
+  }
+
   function resetTimer(start=false){clearInterval(timerInterval);timerInterval=null;timerRunning=false;state.timerLength=Number(els.timerLength?.value||state.timerLength||20);state.timerRemaining=state.timerLength;if(start)toggleTimer(true);else{saveState();renderTimer();}}
   function toggleTimer(forceStart=false){if(!state.started)return;if(timerRunning&&!forceStart){clearInterval(timerInterval);timerInterval=null;timerRunning=false;els.timerBtn.textContent='Start Timer';renderTimer();return;}if(state.timerRemaining<=0)state.timerRemaining=state.timerLength;timerRunning=true;els.timerBtn.textContent='Pause Timer';clearInterval(timerInterval);timerInterval=setInterval(()=>{state.timerRemaining=Math.max(0,state.timerRemaining-1);renderTimer();saveState();if(state.timerRemaining<=0){clearInterval(timerInterval);timerInterval=null;timerRunning=false;els.timerBtn.textContent='Start Timer';flash('TIME!');}},1000);renderTimer();}
   function renderTimer(){if(!els.timer)return;els.timer.textContent=state.timerRemaining;els.timer.className='timer';if(!timerRunning&&state.timerRemaining===state.timerLength)els.timer.classList.add('off');if(state.timerRemaining<=5&&state.timerRemaining>0)els.timer.classList.add('low');if(state.timerRemaining===0)els.timer.classList.add('timeup');}
-  function start(shuffled=true){state=freshState();state.started=true;state.order=shuffled?shuffle(state.order):state.order;state.currentPos=0;markUsed(getCurrentIndex());resetTimer(false);saveState();render();}
-  function reveal(){if(!state.started)return;state.revealed=!state.revealed;saveState();renderQuestion();}
+
+  function start(shuffled=true){if(!questionsReady()){showQuestionLoadError();return;}state=freshState();state.started=true;state.order=shuffled?shuffle(state.order):state.order;state.currentPos=0;markUsed(getCurrentIndex());resetTimer(false);saveState();render();}
+  function reveal(){if(!state.started||!getCurrent())return;state.revealed=!state.revealed;saveState();renderQuestion();}
   function goNext(){if(!state.started)return;if(state.currentPos<state.order.length-1){state.currentPos++;state.revealed=false;markUsed(getCurrentIndex());resetTimer(false);saveState();render();}else flash('You reached question 100.');}
   function goPrev(){if(!state.started)return;if(state.currentPos>0){state.currentPos--;state.revealed=false;resetTimer(false);saveState();render();}}
   function randomUnused(){if(!state.started)return;const unused=QUESTIONS.map((_,i)=>i).filter(i=>!state.used.includes(i));if(!unused.length){flash('All 100 questions have been used!');return;}const pick=unused[Math.floor(Math.random()*unused.length)],pos=state.order.indexOf(pick);state.currentPos=pos;state.revealed=false;markUsed(pick);resetTimer(false);saveState();render();flash('Random unused question');}
-  function jumpToQuestionId(id){const idx=QUESTIONS.findIndex(q=>q.id===Number(id));if(idx<0)return;const pos=state.order.indexOf(idx);state.currentPos=pos;state.started=true;state.revealed=false;markUsed(idx);resetTimer(false);saveState();render();els.pickerDialog?.close();}
+  function jumpToQuestionId(id){if(!questionsReady())return;const idx=QUESTIONS.findIndex(q=>q.id===Number(id));if(idx<0)return;const pos=state.order.indexOf(idx);state.currentPos=pos>=0?pos:0;state.started=true;state.revealed=false;markUsed(idx);resetTimer(false);saveState();render();els.pickerDialog?.close();}
   function changeTickets(delta){state.ticketCount=Math.max(0,(state.ticketCount||0)+delta);saveState();renderMeta();if(delta>0)flash('Ticket awarded +1');}
-  function toggleClean(){state.clean=!state.clean;saveState();renderClean();} function fullScreen(){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.();}
+  function toggleClean(){state.clean=!state.clean;saveState();renderClean();}
+  function fullScreen(){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.();}
   function showLanding(){clearInterval(timerInterval);timerRunning=false;state.started=false;saveState();render();}
-  function resetSession(){if(confirm('Reset all trivia progress, ticket count, and question order?')){localStorage.removeItem(KEY);state=freshState();saveState();render();}}
-  function flash(msg){clearTimeout(toastTimeout);els.toast.textContent=msg;els.toast.classList.add('show');toastTimeout=setTimeout(()=>els.toast.classList.remove('show'),1200);}
-  function render(){els.landing.style.display=state.started?'none':'grid';els.questionWrap.style.display=state.started?'grid':'none';els.timerLength.value=String(state.timerLength||20);renderMeta();renderClean();renderTimer();if(state.started)renderQuestion();renderPicker();}
-  function renderMeta(){const used=state.used.length,remaining=Math.max(0,QUESTIONS.length-used);els.remainingCount.textContent=remaining;els.ticketTop.textContent=state.ticketCount;els.ticketCount.textContent=state.ticketCount;els.progressFill.style.width=`${(used/QUESTIONS.length)*100}%`;els.progressCopy.textContent=`${used} used • ${remaining} remaining`;}
-  function renderClean(){els.app.classList.toggle('clean',!!state.clean);els.dock.classList.toggle('hide',!!state.clean);}
-  function renderQuestion(){const q=getCurrent();if(!q)return;const map=ensureChoiceMap(q),letters=['A','B','C','D'],correctDisplayed=displayedAnswerIndex(q);els.category.textContent=q.category;els.difficulty.textContent=q.difficulty;els.qnum.textContent=`Trivia Question #${q.id}`;els.questionText.textContent=q.q;els.choices.innerHTML='';map.forEach((originalIdx,displayIdx)=>{const div=document.createElement('div');div.className='choice';if(state.revealed){if(displayIdx===correctDisplayed)div.classList.add('correct');else div.classList.add('dim');}div.innerHTML=`<span class="choice-letter">${letters[displayIdx]}</span><span>${escapeHtml(q.choices[originalIdx])}</span>`;els.choices.appendChild(div);});if(state.revealed){els.answerPanel.classList.add('show');els.answerTitle.textContent=`Correct answer: ${letters[correctDisplayed]} — ${q.choices[q.answer]}`;els.answerFact.textContent=q.fact;els.revealBtn.textContent='Hide Answer';}else{els.answerPanel.classList.remove('show');els.answerTitle.textContent='';els.answerFact.textContent='';els.revealBtn.innerHTML='Reveal Answer <span class="kbd">Space</span>';}renderMeta();renderPicker();}
+  function resetSession(){if(confirm('Reset all trivia progress, ticket count, and question order?')){try{localStorage.removeItem(KEY);localStorage.removeItem(OLD_KEY);}catch{}state=freshState();saveState();render();}}
+  function flash(msg){if(!els.toast)return;clearTimeout(toastTimeout);els.toast.textContent=msg;els.toast.classList.add('show');toastTimeout=setTimeout(()=>els.toast.classList.remove('show'),1200);}
+
+  function render(){
+    if(!questionsReady()){showQuestionLoadError();return;}
+    els.landing.style.display=state.started?'none':'grid';
+    els.questionWrap.style.display=state.started?'grid':'none';
+    els.timerLength.value=String(state.timerLength||20);
+    renderMeta();renderClean();renderTimer();
+    if(state.started)renderQuestion();
+    renderPicker();
+  }
+  function renderMeta(){const used=state.used.filter(i=>i>=0&&i<QUESTIONS.length).length,remaining=Math.max(0,QUESTIONS.length-used);if(els.remainingCount)els.remainingCount.textContent=remaining;if(els.ticketTop)els.ticketTop.textContent=state.ticketCount;if(els.ticketCount)els.ticketCount.textContent=state.ticketCount;if(els.progressFill)els.progressFill.style.width=`${QUESTIONS.length?(used/QUESTIONS.length)*100:0}%`;if(els.progressCopy)els.progressCopy.textContent=`${used} used • ${remaining} remaining`;}
+  function renderClean(){els.app?.classList.toggle('clean',!!state.clean);els.dock?.classList.toggle('hide',!!state.clean);}
+  function renderQuestion(){const q=getCurrent();if(!q){showQuestionLoadError();return;}const map=ensureChoiceMap(q),letters=['A','B','C','D'],correctDisplayed=displayedAnswerIndex(q);els.category.textContent=q.category;els.difficulty.textContent=q.difficulty;els.qnum.textContent=`Trivia Question #${q.id}`;els.questionText.textContent=q.q;els.choices.innerHTML='';map.forEach((originalIdx,displayIdx)=>{const div=document.createElement('div');div.className='choice';if(state.revealed){if(displayIdx===correctDisplayed)div.classList.add('correct');else div.classList.add('dim');}div.innerHTML=`<span class="choice-letter">${letters[displayIdx]}</span><span>${escapeHtml(q.choices[originalIdx])}</span>`;els.choices.appendChild(div);});if(state.revealed){els.answerPanel.classList.add('show');els.answerTitle.textContent=`Correct answer: ${letters[correctDisplayed]} — ${q.choices[q.answer]}`;els.answerFact.textContent=q.fact;els.revealBtn.textContent='Hide Answer';}else{els.answerPanel.classList.remove('show');els.answerTitle.textContent='';els.answerFact.textContent='';els.revealBtn.innerHTML='Reveal Answer <span class="kbd">Space</span>';}renderMeta();renderPicker();}
   function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-  function renderPicker(){if(!els.pickerGrid)return;els.pickerSummary.textContent=`${state.used.length} used / ${QUESTIONS.length}`;els.pickerGrid.innerHTML='';const current=getCurrentIndex();QUESTIONS.forEach((q,i)=>{const b=document.createElement('button');b.className='pick';if(state.used.includes(i))b.classList.add('used');if(i===current&&state.started)b.classList.add('current');b.textContent=q.id;b.title=`${q.category}: ${q.q}`;b.addEventListener('click',()=>jumpToQuestionId(q.id));els.pickerGrid.appendChild(b);});}
+  function renderPicker(){if(!els.pickerGrid||!questionsReady())return;els.pickerSummary.textContent=`${state.used.length} used / ${QUESTIONS.length}`;els.pickerGrid.innerHTML='';const current=getCurrentIndex();QUESTIONS.forEach((q,i)=>{const b=document.createElement('button');b.className='pick';if(state.used.includes(i))b.classList.add('used');if(i===current&&state.started)b.classList.add('current');b.textContent=q.id;b.title=`${q.category}: ${q.q}`;b.addEventListener('click',()=>jumpToQuestionId(q.id));els.pickerGrid.appendChild(b);});}
   function openRemote(){const w=window.open('operator.html','FireIceTriviaOperator','width=540,height=820,resizable=yes,scrollbars=yes');if(!w)flash('Pop-up blocked — allow pop-ups for the operator remote.');}
-  $('startShuffle').addEventListener('click',()=>start(true));$('startOrder').addEventListener('click',()=>start(false));$('openRemote').addEventListener('click',openRemote);$('prevBtn').addEventListener('click',goPrev);$('nextBtn').addEventListener('click',goNext);$('revealBtn').addEventListener('click',reveal);$('randomBtn').addEventListener('click',randomUnused);$('timerBtn').addEventListener('click',()=>toggleTimer());els.timerLength.addEventListener('change',()=>{state.timerLength=Number(els.timerLength.value);resetTimer(false);});$('ticketPlus').addEventListener('click',()=>changeTickets(1));$('ticketMinus').addEventListener('click',()=>changeTickets(-1));$('cleanBtn').addEventListener('click',toggleClean);$('pickerBtn').addEventListener('click',()=>els.pickerDialog.showModal());$('helpBtn').addEventListener('click',()=>$('helpDialog').showModal());document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close).close()));
-  document.addEventListener('keydown',(e)=>{if(document.querySelector('dialog[open]')){if(e.key==='Escape')return;}const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;if((e.key===' '||e.key==='Enter')&&state.started){e.preventDefault();reveal();}else if(e.key==='ArrowRight')goNext();else if(e.key==='ArrowLeft')goPrev();else if(e.key.toLowerCase()==='r')randomUnused();else if(e.key.toLowerCase()==='t'){if(e.shiftKey)resetTimer(false);else toggleTimer();}else if(e.key.toLowerCase()==='o')toggleClean();else if(e.key.toLowerCase()==='f')fullScreen();else if(e.key.toLowerCase()==='q')els.pickerDialog.showModal();else if(e.key==='+')changeTickets(1);else if(e.key==='-')changeTickets(-1);else if(e.key==='Escape'&&state.started)showLanding();});
-  if(bc)bc.onmessage=(ev)=>{const m=ev.data||{};if(m.type==='command')handleCommand(m.command,m.value);if(m.type==='requestState')bc.postMessage({type:'state',state});};window.addEventListener('storage',(e)=>{if(e.key===KEY&&e.newValue){try{state={...freshState(),...JSON.parse(e.newValue)};render();}catch{}}});
+
+  $('startShuffle')?.addEventListener('click',()=>start(true));
+  $('startOrder')?.addEventListener('click',()=>start(false));
+  $('openRemote')?.addEventListener('click',openRemote);
+  $('prevBtn')?.addEventListener('click',goPrev);
+  $('nextBtn')?.addEventListener('click',goNext);
+  $('revealBtn')?.addEventListener('click',reveal);
+  $('randomBtn')?.addEventListener('click',randomUnused);
+  $('timerBtn')?.addEventListener('click',()=>toggleTimer());
+  els.timerLength?.addEventListener('change',()=>{state.timerLength=Number(els.timerLength.value);resetTimer(false);});
+  $('ticketPlus')?.addEventListener('click',()=>changeTickets(1));
+  $('ticketMinus')?.addEventListener('click',()=>changeTickets(-1));
+  $('cleanBtn')?.addEventListener('click',toggleClean);
+  $('pickerBtn')?.addEventListener('click',()=>els.pickerDialog?.showModal());
+  $('helpBtn')?.addEventListener('click',()=>$('helpDialog')?.showModal());
+  document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>$(b.dataset.close)?.close()));
+
+  document.addEventListener('keydown',(e)=>{if(document.querySelector('dialog[open]')){if(e.key==='Escape')return;}const tag=document.activeElement?.tagName;if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;if((e.key===' '||e.key==='Enter')&&state.started){e.preventDefault();reveal();}else if(e.key==='ArrowRight')goNext();else if(e.key==='ArrowLeft')goPrev();else if(e.key.toLowerCase()==='r')randomUnused();else if(e.key.toLowerCase()==='t'){if(e.shiftKey)resetTimer(false);else toggleTimer();}else if(e.key.toLowerCase()==='o')toggleClean();else if(e.key.toLowerCase()==='f')fullScreen();else if(e.key.toLowerCase()==='q')els.pickerDialog?.showModal();else if(e.key==='+')changeTickets(1);else if(e.key==='-')changeTickets(-1);else if(e.key==='Escape'&&state.started)showLanding();});
+
+  if(bc)bc.onmessage=(ev)=>{const m=ev.data||{};if(m.type==='command')handleCommand(m.command,m.value);if(m.type==='requestState')bc.postMessage({type:'state',state});};
+  window.addEventListener('storage',(e)=>{if(e.key===KEY&&e.newValue){try{state={...freshState(),...JSON.parse(e.newValue)};render();}catch{}}});
   function handleCommand(cmd,value){const map={startShuffle:()=>start(true),startOrder:()=>start(false),reveal,goNext,goPrev,randomUnused,toggleTimer:()=>toggleTimer(),resetTimer:()=>resetTimer(false),ticketPlus:()=>changeTickets(1),ticketMinus:()=>changeTickets(-1),toggleClean,fullscreen:fullScreen,landing:showLanding,reset:resetSession,jump:()=>jumpToQuestionId(value)};map[cmd]?.();}
-  window.FireIceTrivia={getState:()=>state,command:handleCommand,resetSession};render();
+  window.FireIceTrivia={getState:()=>state,command:handleCommand,resetSession};
+  render();
 })();
