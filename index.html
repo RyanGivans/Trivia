@@ -23,7 +23,7 @@
     <div class="eyebrow">Associate Rally • Food & Beverage</div>
     <h1><span class="hot">Trivia</span><br>Challenge</h1>
     <p>100 open-answer questions in one fixed order. Every question shows its ticket value before the answer: Easy = 2 tickets, Medium = 4, Hard = 10.</p>
-    <div class="actions"><button class="btn primary" id="startBtn">Start Trivia</button><button class="btn secondary" id="operatorBtn">Open Operator</button><button class="btn" id="answersBtn">Answer Sheet</button><button class="btn" id="coinBtn">Coin Flip</button></div>
+    <div class="actions"><button class="btn" id="welcomeBtn">Welcome Screen</button><button class="btn" id="aotmBtn">Associate of Month</button><button class="btn primary" id="startBtn">Start Trivia</button><button class="btn secondary" id="operatorBtn">Open Operator</button><button class="btn" id="answersBtn">Answer Sheet</button><button class="btn" id="coinBtn">Coin Flip</button></div>
     <p style="font-size:13px;color:var(--muted);margin:18px 0 0">Space = reveal • ←/→ = navigate • T = timer • O = clean projector • F = fullscreen</p>
   </div>
 </section>
@@ -85,7 +85,7 @@ function toggleTimer(){if(!q())return;if(state.timerRunning){stopTimer();save();
 function toggleClean(){state.clean=!state.clean;render()}
 function home(){state.index=-1;state.revealed=false;resetTimer(false);render()}
 function act(a){if(a==='next')next();else if(a==='prev')prev();else if(a==='reveal')reveal();else if(a==='timer')toggleTimer();else if(a==='resetTimer')resetTimer();else if(a==='clean')toggleClean();else if(a==='home')home();else if(a==='start')start();else if(a&&a.startsWith('goto:')){const n=parseInt(a.split(':')[1],10);if(n>=0&&n<qs.length){state.index=n;state.revealed=false;resetTimer(false);render()}}}
-$('startBtn').onclick=start;$('operatorBtn').onclick=()=>window.open('operator.html','fiTriviaOperator','width=760,height=900');$('answersBtn').onclick=()=>window.open('answer-sheet.html','_blank');$('coinBtn').onclick=()=>window.open('coin-flip.html','_blank');
+$('welcomeBtn').onclick=()=>location.href='welcome.html';$('aotmBtn').onclick=()=>location.href='associate-of-the-month.html';$('startBtn').onclick=start;$('operatorBtn').onclick=()=>window.open('operator.html','fiTriviaOperator','width=760,height=900');$('answersBtn').onclick=()=>window.open('answer-sheet.html','_blank');$('coinBtn').onclick=()=>window.open('coin-flip.html','_blank');
 $('revealBtn').onclick=reveal;$('nextBtn').onclick=next;$('prevBtn').onclick=prev;$('timerBtn').onclick=toggleTimer;$('timerSelect').onchange=()=>{state.timerLength=parseInt($('timerSelect').value,10)||20;resetTimer(false);render()};$('cleanBtn').onclick=toggleClean;$('fullBtn').onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.()};$('homeBtn').onclick=home;
 document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))return;if(e.code==='Space'||e.code==='Enter'){e.preventDefault();reveal()}else if(e.code==='ArrowRight')next();else if(e.code==='ArrowLeft')prev();else if(e.key.toLowerCase()==='t')toggleTimer();else if(e.key.toLowerCase()==='o')toggleClean();else if(e.key.toLowerCase()==='f'){if(!document.fullscreenElement)document.documentElement.requestFullscreen?.();else document.exitFullscreen?.()}});
 bc?.addEventListener('message',e=>{if(e.data?.type==='action')act(e.data.action)});
